@@ -4,7 +4,7 @@ An intellectual exercise looking to answer the question: what would have been a 
 
 ## The 16-instruction ISA
 
-| name  | opcode 15:11 | sign 10 | dest 9:7       | src1 6:4 | src2 4:0           | Comments                                                                      |
+| name  | opcode 15:12 | sign 11 | dest 10:8       | src1 7:5 | src2 4:0           | Comments                                                                      |
 | ----- | ------------ | ------- | -------------- | -------- | ------------------ | ----------------------------------------------------------------------------- |
 | IMM10 |              | imm14   | nzresv:2,imm13 | imm12:10 | imm9:5             | Interlocking prefix, affects the immediate field of the following instruction |
 | JAL   |              |         | imm8:6         | imm5:3   | imm10:9,imm2:0/rs2 | NB: sign&imm10&imm9 ? rs2 : signed immediate {sign,imm10:0}                   |
