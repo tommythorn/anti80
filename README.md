@@ -14,7 +14,7 @@ An intellectual exercise looking to answer the question: what would have been a 
 | LW    |              |         | rd             | rs1      | imm4:0/rs2         |
 | LB    |              |         | rd             | rs1      | imm4:0/rs2         |
 | LBU   |              |         | rd             | rs1      | imm4:0/rs2         |
-| LI    |              |         | rd             | nzresv   | imm4:0/rs2         | Load Immediate, register value is ignored                                     |
+| MOV   |              |         | rd             | nzresv   | imm4:0/rs2         | Load Immediate, register value is ignored                                     |
 | ADD   |              |         | rd             | rs1      | imm4:0/rs2         |
 | SUBR  |              |         | rd             | rs1      | imm4:0/rs2         |
 | AND   |              |         | rd             | rs1      | imm4:0/rs2         |
