@@ -14,7 +14,7 @@ An intellectual exercise looking to answer the question: what would have been a 
 | LW    |              |         | rd             | rs1      | imm4:0/rs2         |
 | LB    |              |         | rd             | rs1      | imm4:0/rs2         |
 | LBU   |              |         | rd             | rs1      | imm4:0/rs2         |
-| MOV   |              |         | rd             | nzresv   | imm4:0/rs2         | Load Immediate, register value is ignored                                     |
+| MOV   |              |         | rd             | nzresv   | imm4:0/rs2         | rs1 value is ignored                                                          |
 | ADD   |              |         | rd             | rs1      | imm4:0/rs2         |
 | SUBR  |              |         | rd             | rs1      | imm4:0/rs2         |
 | AND   |              |         | rd             | rs1      | imm4:0/rs2         |
@@ -23,7 +23,7 @@ An intellectual exercise looking to answer the question: what would have been a 
 | SR    |              |         | rd             | rs1      | imm4:0/rs2         | imm3 ? sra : srl                                                              |
 | SL    |              |         | rd             | rs1      | imm4:0/rs2         |
 
-For most instruction, insn[15,4:3]|$past(inst)==IMM10 choses between the register and the immediate.  Also applies to JAL, but its larger immediate means we interp these bits differently.
+For most instruction, insn[11,4:3]|$past(inst)==IMM10 choses between the register and the immediate.  Also applies to JAL, but its larger immediate means we interp these bits differently.
 
 nzresv = must be zero. Non-zero values are reserved
 
