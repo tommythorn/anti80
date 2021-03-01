@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 modular-bitfield = "0.*"
+num-traits = "*"
+num-derive = "*"

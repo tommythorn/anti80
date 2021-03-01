@@ -29,9 +29,7 @@ nzresv = must be zero. Non-zero values are reserved
 
 imm4:0/rs2 is immediate unless sign & imm4 are set, then it's a register
 
-cond:
-  reg: EQ,NE,LT,GE,LTU,GEU
-  imm: EQ,NE,LT,GT,LTU,GTU
+cond: EQ,NE,-,-,LT,GE,LTU,GEU
 
 ## Priorities
 
@@ -50,13 +48,12 @@ Deeply indebt to Erik Corry for poking holes in many many earlier drafts and sug
 ### Properties
 - The Z80 has 16 8-bit registers. Using the same bits and datapath Anti80 offer 8 16-bit registers.
 - All instructions are exactly 16-bit and must be 16-bit aligned.  It's not possible to target an unaligned instruction (JAL addresses w)
-- All instructions have optional immediate fields that can be expanded to full 16-bit with an immediately preceeding IMM10 instructions.
-- The imm4:0/rs2 denotes a register unless the sign & imm4 & imm3 bits are set and there is no proceeding IMM10 instruction.  That means we exchange the -32..-25 immediate values for the ability to use a register as a source, leaving just -24..31.  Of course used IMM10 enlargen that to any full 16-bit constant.
+- All instructions have optional immediate fields that can be expanded to full 16-bit with an immediately preceeding IMM10 instructions
+- The imm4:0/rs2 denotes a register unless the sign & imm4 & imm3 bits are set and there is no proceeding IMM10 instruction.  That means we exchange the -32..-25 immediate values for the ability to use a register as a source, leaving just -24..31.  Of course one can use IMM10 enlargen that to any full 16-bit constant.
 - There are no condition flags
 - There are only two control flow instructions, a conditional skip-next (SKIP) and a jump-and-link (JAL) instruction (like most instruction, it can also use a register).  JAL sets the link register r7 unconditionally.  This means that returning clobbers the return address, but that's  should be ok.  Skipping a IMM10 is fine, but rarely useful.
 - As subtraction with an immediate can already be done by an ADD, Anti80 uses (inspired by PowerPC/POWER) a reverse ordered subtraction (arg2 - arg1).  As a special case with arg2 = 0 it implements negation.
 - There's currently little thought given to interrupts; it will require more support
-- The comparisons done by SKIP are still under investition.  The full set is ne,eq,lt,ge,le,gt,ltu,geu,leu,gtu.  RISC-V makes do with just ne,eq,lt,ge,ltu,geu because of the symmetry of the two operands means you can just swap them, but in Anti80 they aren't symmetrical.  The current design behaves differently for comparing against an immediate (as often you can replace a `x <= k` with `x < k-1` but not in all cases).
 - LI ignores the operand that comes from the rs1 register so there's a slight inefficiency in the encoding.
 - The Z80 alu is 4 bit wide and Anti80 is fundamentally 16-bit, thus expect 4 cycles through the ALU for (almost) all instructions.
 - Anti80 follows RISC-V in many choices, but does allow a register + register load.
