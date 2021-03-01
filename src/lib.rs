@@ -1,3 +1,27 @@
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+
+// XXX assignment of numerical values to opcodes matters for the decoder and is still TBD
+#[derive(FromPrimitive)]
+pub enum Anti80Opcode {
+    Imm10,
+    Jal,
+    Skipc,
+    Sw,
+    Sb,
+    Lw,
+    Lb,
+    Lbu,
+    Mov,
+    Add,
+    Subr,
+    And,
+    Or,
+    Xor,
+    Sr,
+    Sl,
+}
+
 #[derive(Debug)]
 // XXX should probably keep memory outside the processor state
 pub struct Anti80 {
@@ -26,8 +50,32 @@ impl Anti80 {
         // fetch
         let insn = self.load16(self.pc);
         let opcode = insn >> 12;
-        match opcode {
-            _ => panic!("Haven't implemented opcode {} yet", opcode),
+        use Anti80Opcode::*;
+
+        let imm = 0;
+        let src1 = if true { self.reg[0] } else { imm };
+
+        let result = match FromPrimitive::from_u16(opcode).expect("can't happen") {
+            Imm10 => panic!("Haven't implemented this instruction yet"),
+            Jal => panic!("Haven't implemented this instruction yet"),
+            Skipc => panic!("Haven't implemented this instruction yet"),
+            Sw => panic!("Haven't implemented this instruction yet"),
+            Sb => panic!("Haven't implemented this instruction yet"),
+            Lw => panic!("Haven't implemented this instruction yet"),
+            Lb => panic!("Haven't implemented this instruction yet"),
+            Lbu => panic!("Haven't implemented this instruction yet"),
+            Mov => src1,
+            Add => panic!("Haven't implemented this instruction yet"),
+            Subr => panic!("Haven't implemented this instruction yet"),
+            And => panic!("Haven't implemented this instruction yet"),
+            Or => panic!("Haven't implemented this instruction yet"),
+            Xor => panic!("Haven't implemented this instruction yet"),
+            Sr => panic!("Haven't implemented this instruction yet"),
+            Sl => panic!("Haven't implemented this instruction yet"),
+        };
+
+        if false {
+            self.reg[0] = result;
         }
     }
 }
@@ -39,10 +87,5 @@ mod tests {
     fn init_and_step() {
         let mut anti80 = Anti80::new();
         anti80.step();
-    }
-
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
     }
 }
