@@ -3,23 +3,23 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 // XXX assignment of numerical values to opcodes matters for the decoder and is still TBD
 #[derive(BitfieldSpecifier, PartialEq, Eq)]
+#[bits = 4]
 pub enum Anti80Opcode {
-    Imm10,
-    Jal,
-    Skipc,
+    Prefix,
     Sw,
     Sb,
+    Jal,
+    Li,
     Lw,
     Lb,
     Lbu,
-    Mov,
+    Skipc,
     Add,
     Subr,
     And,
     Or,
     Xor,
-    Sr,
-    Sl,
+    Shr,
 }
 use Anti80Opcode::*;
 
@@ -62,6 +62,8 @@ pub struct Anti80 {
     pub pc: i16,
     pub reg: Vec<i16>,
     pub asm_addr: i16, // Just a convenience to make the code more readable
+    pub prefix_mask: i16,
+    pub prefix_bits: i16,
 }
 
 impl Anti80 {
@@ -71,6 +73,8 @@ impl Anti80 {
             pc: 0,
             reg: vec![0; 8],
             asm_addr: 0,
+            prefix_mask: !0,
+            prefix_bits: 0,
         }
     }
     pub fn load8(&self, addr: i16) -> i16 {
@@ -88,6 +92,8 @@ impl Anti80 {
         self.memory[addr as usize] = bytes[0];
         self.memory[addr as usize + 1] = bytes[1];
     }
+
+    // XXX factors assembly out of Anti80
     fn asm_internal(&mut self, op: Anti80Opcode, sign: u8, dest: u8, src1: u8, src2: u8) {
         self.store_insn(
             self.asm_addr,
@@ -101,31 +107,16 @@ impl Anti80 {
         self.asm_addr += 2;
     }
     pub fn asm_alu(&mut self, op: Anti80Opcode, dest: Anti80Reg, rs1: Anti80Reg, rs2: Anti80Reg) {
-        self.asm_internal(op, 1, dest as u8, rs1 as u8, (rs2 as u8) | 0x18)
+        self.asm_internal(op, 1, dest as u8, rs1 as u8, rs2 as u8)
     }
     fn asm_alui(&mut self, op: Anti80Opcode, dest: Anti80Reg, rs1: Anti80Reg, imm: i16) {
-        assert!(-24 <= imm && imm < 32); // XXX Don't handle IMM10 yet
+        assert!(-24 <= imm && imm < 32); // XXX Don't handle Prefix yet
         let sign = if imm < 0 { 1 } else { 0 };
         self.asm_internal(op, sign, dest as u8, rs1 as u8, imm as u8)
     }
 
-    pub fn asm_jal(&mut self, rs2: Anti80Reg) {
-        self.asm_internal(Jal, 1, 0, 0, 0x18 + (rs2 as u8));
-    }
-    pub fn asm_jali(&mut self, target: i16) {
-        let mut delta = target.wrapping_sub(self.asm_addr);
-        assert!((delta & 1) == 0);
-        delta = delta / 2;
-        assert!(-2048 <= delta && delta < 2047); // XXX No IMM10 support yet
-        let imm86 = ((delta >> 6) & 7) as u8;
-        let imm53 = ((delta >> 3) & 7) as u8;
-        let imm109 = ((delta >> 9) & 3) as u8;
-        let imm20 = (delta & 7) as u8;
-        let sign = if delta < 0 { 1 } else { 0 };
-        self.asm_internal(Jal, sign, imm86, imm53, imm109 * 8 + imm20);
-    }
     pub fn asm_store(&mut self, op: Anti80Opcode, rs1: Anti80Reg, rs2: Anti80Reg, offset: i16) {
-        assert!(-32 <= offset && offset < 32); // XXX No IMM10 support yet
+        assert!(-32 <= offset && offset < 32); // XXX No Prefix support yet
         let imm43 = ((offset >> 3) & 3) as u8;
         let imm20 = (offset & 7) as u8;
         let sign = if offset < 0 { 1 } else { 0 };
@@ -138,6 +129,30 @@ impl Anti80 {
     pub fn asm_sb(&mut self, rs1: Anti80Reg, rs2: Anti80Reg, offset: i16) {
         self.asm_store(Sb, rs1, rs2, offset)
     }
+
+    pub fn asm_jal(&mut self, rs2: Anti80Reg) {
+        self.asm_internal(Jal, 1, 0, 0, rs2 as u8);
+    }
+
+    pub fn asm_jali(&mut self, target: i16) {
+        let mut delta = target.wrapping_sub(self.asm_addr);
+        assert!((delta & 1) == 0);
+        delta = delta / 2;
+        assert!(-512 <= delta && delta < 2047); // XXX No Prefix support yet
+
+        let imm20 = (delta & 7) as u8;
+        let imm53 = ((delta >> 3) & 7) as u8;
+        let imm106 = ((delta >> 6) & 31) as u8;
+        let sign = if delta < 0 { 1 } else { 0 };
+        self.asm_internal(Jal, sign, imm20, imm53, imm106);
+    }
+
+    pub fn asm_li(&mut self, dest: Anti80Reg, imm: i16) {
+        assert!(-256 <= imm && imm < 256); // XXX Don't handle Prefix yet
+        let sign = if imm < 0 { 1 } else { 0 };
+        self.asm_internal(Li, sign, dest as u8, (imm as u8 >> 5) & 7, imm as u8 & 31)
+    }
+
     pub fn asm_skipc(&mut self) {}
     pub fn asm_skipci(&mut self) {}
     pub fn asm_lw(&mut self) {}
@@ -146,10 +161,6 @@ impl Anti80 {
     pub fn asm_lbi(&mut self) {}
     pub fn asm_lbu(&mut self) {}
     pub fn asm_lbui(&mut self) {}
-    pub fn asm_mov(&mut self) {}
-    pub fn asm_movi(&mut self, dest: Anti80Reg, imm: i16) {
-        self.asm_alui(Mov, dest, R0, imm)
-    }
 
     pub fn asm_add(&mut self, dest: Anti80Reg, rs1: Anti80Reg, rs2: Anti80Reg) {
         self.asm_alu(Add, dest, rs1, rs2)
@@ -178,86 +189,113 @@ impl Anti80 {
         self.pc += 2;
         use Anti80Opcode::*;
 
-        let src1 = insn.src1() as i16;
-        let src2 = insn.src2() as i16;
-        let dest = insn.dest() as i16;
-        let rd = dest as usize;
-        let sign = insn.sign() != 0;
         let opcode = insn.opcode();
+        let dest = insn.dest() as i16;
+        let src2 = insn.src2() as i16;
+        let src1 = insn.src1() as i16;
+        let rd = dest as usize;
+        let sign: i16 = if insn.sign() != 0 { -1 } else { 0 };
 
-        let store_simm6 = {
-            let uimm5 = ((src2 >> 3) & 0x18) + dest;
-            if sign {
-                uimm5 - 32
-            } else {
-                uimm5
-            }
-        };
-        let simm6 = if sign { src2 - 32 } else { src2 };
-
-        let src2_is_reg = opcode == Sw || opcode == Sb || sign && src2 >= 0x18;
         let rs1 = self.reg[src1 as usize] as i16;
         let rs2 = self.reg[src2 as usize & 7] as i16;
-        let rs2_imm = if opcode == Sw || opcode == Sb {
-            store_simm6
-        } else if src2_is_reg {
+
+        // Skipc, .., xor uses the same format
+        let simm6_or_rs2 = if src2 < 0x18 && sign < 0 {
             rs2
         } else {
-            simm6
+            (sign << 6 | src2) & self.prefix_mask | self.prefix_bits
         };
 
-        match opcode {
-            Imm10 => panic!("Haven't implemented this instruction yet"),
+        match &opcode {
+            Prefix => {
+                assert_eq!(self.prefix_mask, !0); // Prefix can only prefix a non-prefix
+                self.prefix_mask = !0b0111_1111_1110_0000; // 14:5
+                self.prefix_bits = dest << 13 | src1 << 10 | src2 << 5;
+            }
+
+            Sw | Sb => {
+                let store_imm =
+                    ((sign << 5) | (src2 >> 3) | dest) & self.prefix_mask | self.prefix_bits;
+
+                match opcode {
+                    Sb => self.store8(store_imm + rs1, rs2),
+                    _ => {
+                        self.store8(store_imm + rs1, rs2);
+                        self.store8(store_imm + rs1 + 1, rs2 >> 8);
+                    }
+                }
+            }
+
             Jal => {
                 self.reg[7] = self.pc;
-                let uimm11 = (src2 >> 3 << 9) + (dest << 6) + (src1 << 3) + (src2 & 7);
-                let jal_simm12 = if sign { uimm11 - 2048 } else { uimm11 };
-                self.pc += (jal_simm12 << 1) as i16;
+                if src2 < 0x18 && sign < 0 {
+                    self.pc = rs2
+                } else {
+                    let jal_imm: i16 = (sign << 11 | src2 << 6 | src1 << 3 | dest)
+                        & self.prefix_mask
+                        | self.prefix_bits;
+                    self.pc = self.pc + (jal_imm << 1)
+                };
             }
+
+            Li => {
+                self.reg[rd] = (sign << 8 | src1 << 5 | src2) & self.prefix_mask | self.prefix_bits
+            }
+
+            Lw | Lb | Lbu => {
+                let load_imm = (sign << 5 | src2) & self.prefix_mask | self.prefix_bits;
+                match &opcode {
+                    Lw => {
+                        let lo = self.load8(rs1 + load_imm);
+                        let hi = self.load8(rs1 + load_imm + 1);
+                        self.reg[rd] = hi * 256 + lo;
+                    }
+                    Lb => {
+                        let b = self.load8(rs1 + load_imm);
+                        self.reg[rd] = if b < 128 { b } else { b - 256 }
+                    }
+                    Lbu => self.reg[rd] = self.load8(rs1 + load_imm),
+                    _ => panic!("can't happen"),
+                }
+            }
+
             Skipc => {
                 use Anti80SkipCond::*;
                 if match FromPrimitive::from_i16(dest).expect("can't happen") {
-                    Beq => rs1 == rs2_imm,
-                    Bne => rs1 != rs2_imm,
-                    Blt => rs1 < rs2_imm,
-                    Bge => rs1 >= rs2_imm,
-                    Bltu => (rs1 as usize) < (rs2_imm as usize),
-                    Bgeu => (rs1 as usize) >= (rs2_imm as usize),
+                    Beq => rs1 == simm6_or_rs2,
+                    Bne => rs1 != simm6_or_rs2,
+                    Blt => rs1 < simm6_or_rs2,
+                    Bge => rs1 >= simm6_or_rs2,
+                    Bltu => (rs1 as usize) < (simm6_or_rs2 as usize),
+                    Bgeu => (rs1 as usize) >= (simm6_or_rs2 as usize),
                     _ => false,
                 } {
                     self.pc += 2
                 }
             }
-            Sw => self.store8(rs2_imm + rs1, rs2),
-            Sb => {
-                self.store8(rs2_imm + rs1, rs2);
-                self.store8(rs2_imm + rs1 + 1, rs2 >> 8);
-            }
-            Lw => {
-                let lo = self.load8(rs2_imm + rs1);
-                let hi = self.load8(rs2_imm + rs1 + 1);
-                self.reg[rd] = hi * 256 + lo;
-            }
-            Lb => {
-                let b = self.load8(rs2_imm + rs1);
-                self.reg[rd] = if b < 128 { b } else { b - 256 }
-            }
-            Lbu => self.reg[rd] = self.load8(rs2_imm + rs1),
-            Mov => self.reg[rd] = rs2_imm,
-            Add => self.reg[rd] = rs2_imm + rs1,
-            Subr => self.reg[rd] = rs2_imm - rs1,
-            And => self.reg[rd] = rs2_imm & rs1,
-            Or => self.reg[rd] = rs2_imm | rs1,
-            Xor => self.reg[rd] = rs2_imm ^ rs1,
-            Sr => {
-                self.reg[rd] = if (src2 & 16) != 0 {
-                    rs1 >> rs2_imm
-                } else {
-                    (rs1 as u16 >> rs2_imm) as i16
+
+            Add => self.reg[rd] = simm6_or_rs2 + rs1,
+            Subr => self.reg[rd] = simm6_or_rs2 - rs1,
+            And => self.reg[rd] = simm6_or_rs2 & rs1,
+            Or => self.reg[rd] = simm6_or_rs2 | rs1,
+            Xor => self.reg[rd] = simm6_or_rs2 ^ rs1,
+            Shr => {
+                self.reg[rd] = match insn.sign() as i16 * 4 + src2 >> 3 {
+                    0 | 1 => ((rs1 as u16) >> (src2 & 15)) as i16, // SRL imm4
+                    2 | 3 => rs1 >> (src2 & 15),                   // SRA imm4
+                    4 => ((rs1 as u16) >> rs2) as i16,             // SRL rs2
+                    5 => rs1 << rs2,                               // SLL rs2
+                    6 => rs1 >> rs2,                               // SRA rs2
+                    7 => rs1 << (src2 & 7),                        // SLL imm3
+                    _ => panic!("can't happen"),
                 }
             }
-            Sl => self.reg[rd] = rs1 << rs2_imm,
         };
+
+        if opcode != Prefix {
+            self.prefix_mask = !0;
+            self.prefix_bits = 0;
+        }
     }
 }
 
@@ -270,8 +308,8 @@ mod tests {
         use Anti80Opcode::*;
         let mut anti80 = Anti80::new();
 
-        anti80.asm_movi(R5, 14);
-        anti80.asm_movi(R6, 7);
+        anti80.asm_li(R5, 14);
+        anti80.asm_li(R6, 7);
         anti80.asm_alu(Add, R7, R5, R6);
 
         anti80.step();
