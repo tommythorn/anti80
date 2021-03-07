@@ -233,7 +233,7 @@ impl Anti80 {
 
             Sw | Sb => {
                 let store_imm =
-                    ((sign << 5) | (src2 >> 3) | dest) & self.prefix_mask | self.prefix_bits;
+                    ((sign << 5) | (src2 & 24) | dest) & self.prefix_mask | self.prefix_bits;
 
                 match opcode {
                     Sb => self.store8(store_imm + rs1, rs2),
@@ -353,6 +353,30 @@ mod tests {
             }
             cpu.step();
             assert_eq!(cpu.reg, [0, 0, 42, 0, v.wrapping_add(42) as i16, 0, 0, 0]);
+        }
+    }
+
+    #[test]
+    fn sw() {
+        let mut cpu = Anti80::new();
+        assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 0, 0, 0]);
+        cpu.reg[2] = 4000; /* base addr */
+
+        // XXX Haven't decided on misaligned behavior
+        for offset in -300..=300 {
+            cpu.reg[1] = 1234 + offset;
+            cpu.asm_addr = 0;
+            cpu.pc = 0;
+            cpu.asm_sw(R2 /*addr*/, R1, offset * 2);
+            if (Anti80Insn::from_bytes(cpu.load16(cpu.pc))).opcode() == Prefix {
+                cpu.step();
+            }
+            cpu.step();
+
+            let lo = cpu.load8(4000 + offset * 2);
+            let hi = cpu.load8(4000 + offset * 2 + 1);
+            let got = hi * 256 + lo;
+            assert_eq!(got, 1234 + offset);
         }
     }
 
