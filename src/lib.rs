@@ -150,10 +150,13 @@ impl Anti80 {
     }
 
     pub fn asm_jali(&mut self, target: i16) {
-        let mut delta = target.wrapping_sub(self.asm_addr);
+        // Calculate the delta started _after_ this function
+        let mut delta = target.wrapping_sub(self.asm_addr.wrapping_add(2));
         assert!((delta & 1) == 0);
         delta = delta / 2;
         if !(-512 <= delta && delta < 2047) {
+            // Now account for the additional prefix
+            delta = delta.wrapping_sub(1);
             self.asm_prefix(delta);
         }
         let imm20 = (delta & 7) as u8;
@@ -233,7 +236,7 @@ impl Anti80 {
 
             Sw | Sb => {
                 let store_imm =
-                    ((sign << 5) | (src2 & 24) | dest) & self.prefix_mask | self.prefix_bits;
+                    (sign << 5 | src2 & 24 | dest) & self.prefix_mask | self.prefix_bits;
 
                 match opcode {
                     Sb => self.store8(store_imm + rs1, rs2),
@@ -246,13 +249,12 @@ impl Anti80 {
 
             Jal => {
                 self.reg[7] = self.pc;
-                if src2 < 0x18 && sign < 0 {
+                if self.prefix_mask == !0 && src2 < 8 && sign < 0 {
                     self.pc = rs2
                 } else {
-                    let jal_imm: i16 = (sign << 11 | src2 << 6 | src1 << 3 | dest)
-                        & self.prefix_mask
+                    let imm = (sign << 11 | src2 << 6 | src1 << 3 | dest) & self.prefix_mask
                         | self.prefix_bits;
-                    self.pc = self.pc + (jal_imm << 1)
+                    self.pc = self.pc + (imm << 1)
                 };
             }
 
@@ -392,5 +394,37 @@ mod tests {
         assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 14, 7, 21]);
 
         //      anti80.asm(Jal, 1, 7, 5, 6 | 0x18);
+    }
+
+    #[test]
+    fn jal() {
+        let mut cpu = Anti80::new();
+        cpu.reg[3] = 0x4000; /* base addr */
+        cpu.pc = 0x1234;
+        cpu.asm_addr = 0x1234;
+        cpu.asm_jal(R3);
+        cpu.step();
+        assert_eq!(cpu.pc, 0x4000);
+        assert_eq!(cpu.reg[7], 0x1236);
+    }
+
+    #[test]
+    fn jali() {
+        let mut cpu = Anti80::new();
+
+        for v in -600..3000 {
+            cpu.asm_addr = 2000;
+            cpu.pc = cpu.asm_addr;
+            let target = cpu.asm_addr + v * 2;
+            let mut ret_addr = cpu.asm_addr + 2;
+            cpu.asm_jali(target);
+            if (Anti80Insn::from_bytes(cpu.load16(cpu.pc))).opcode() == Prefix {
+                ret_addr = ret_addr.wrapping_add(2);
+                cpu.step();
+            }
+            cpu.step();
+            assert_eq!(cpu.pc, target);
+            assert_eq!(cpu.reg[7], ret_addr);
+        }
     }
 }
