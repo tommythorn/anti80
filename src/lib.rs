@@ -383,12 +383,11 @@ mod tests {
     #[test]
     fn init_and_step() {
         let mut cpu = Anti80::new();
+        cpu.reg[5] = 14;
+        cpu.reg[6] = 7;
 
-        cpu.asm_alu(Add, R7, R5, R6);
-
-        cpu.step();
+        cpu.asm_alu(Add, R7, R6, R5);
         assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 14, 7, 0]);
-
         cpu.step();
         assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 14, 7, 21]);
 
