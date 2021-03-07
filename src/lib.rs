@@ -109,14 +109,29 @@ impl Anti80 {
     pub fn asm_alu(&mut self, op: Anti80Opcode, dest: Anti80Reg, rs1: Anti80Reg, rs2: Anti80Reg) {
         self.asm_internal(op, 1, dest as u8, rs1 as u8, rs2 as u8)
     }
+
+    pub fn asm_prefix(&mut self, imm: i16) {
+        self.asm_internal(
+            Prefix,
+            0,
+            ((imm >> 13) & 3) as u8,
+            ((imm >> 10) & 7) as u8,
+            ((imm >> 5) & 31) as u8,
+        )
+    }
+
     fn asm_alui(&mut self, op: Anti80Opcode, dest: Anti80Reg, rs1: Anti80Reg, imm: i16) {
-        assert!(-24 <= imm && imm < 32); // XXX Don't handle Prefix yet
+        if !(-24 <= imm && imm < 32) {
+            self.asm_prefix(imm);
+        }
         let sign = if imm < 0 { 1 } else { 0 };
-        self.asm_internal(op, sign, dest as u8, rs1 as u8, imm as u8)
+        self.asm_internal(op, sign, dest as u8, rs1 as u8, (imm & 31) as u8)
     }
 
     pub fn asm_store(&mut self, op: Anti80Opcode, rs1: Anti80Reg, rs2: Anti80Reg, offset: i16) {
-        assert!(-32 <= offset && offset < 32); // XXX No Prefix support yet
+        if !(-32 <= offset && offset < 32) {
+            self.asm_prefix(offset);
+        }
         let imm43 = ((offset >> 3) & 3) as u8;
         let imm20 = (offset & 7) as u8;
         let sign = if offset < 0 { 1 } else { 0 };
@@ -138,8 +153,9 @@ impl Anti80 {
         let mut delta = target.wrapping_sub(self.asm_addr);
         assert!((delta & 1) == 0);
         delta = delta / 2;
-        assert!(-512 <= delta && delta < 2047); // XXX No Prefix support yet
-
+        if !(-512 <= delta && delta < 2047) {
+            self.asm_prefix(delta);
+        }
         let imm20 = (delta & 7) as u8;
         let imm53 = ((delta >> 3) & 7) as u8;
         let imm106 = ((delta >> 6) & 31) as u8;
@@ -148,7 +164,9 @@ impl Anti80 {
     }
 
     pub fn asm_li(&mut self, dest: Anti80Reg, imm: i16) {
-        assert!(-256 <= imm && imm < 256); // XXX Don't handle Prefix yet
+        if !(-256 <= imm && imm < 256) {
+            self.asm_prefix(imm);
+        }
         let sign = if imm < 0 { 1 } else { 0 };
         self.asm_internal(Li, sign, dest as u8, (imm as u8 >> 5) & 7, imm as u8 & 31)
     }
@@ -200,10 +218,10 @@ impl Anti80 {
         let rs2 = self.reg[src2 as usize & 7] as i16;
 
         // Skipc, .., xor uses the same format
-        let simm6_or_rs2 = if src2 < 0x18 && sign < 0 {
+        let simm6_or_rs2 = if self.prefix_mask == !0 && src2 < 8 && sign < 0 {
             rs2
         } else {
-            (sign << 6 | src2) & self.prefix_mask | self.prefix_bits
+            (sign << 5 | src2) & self.prefix_mask | self.prefix_bits
         };
 
         match &opcode {
@@ -274,8 +292,8 @@ impl Anti80 {
                 }
             }
 
-            Add => self.reg[rd] = simm6_or_rs2 + rs1,
-            Subr => self.reg[rd] = simm6_or_rs2 - rs1,
+            Add => self.reg[rd] = simm6_or_rs2.wrapping_add(rs1),
+            Subr => self.reg[rd] = simm6_or_rs2.wrapping_sub(rs1),
             And => self.reg[rd] = simm6_or_rs2 & rs1,
             Or => self.reg[rd] = simm6_or_rs2 | rs1,
             Xor => self.reg[rd] = simm6_or_rs2 ^ rs1,
@@ -304,22 +322,51 @@ mod tests {
     use super::*;
 
     #[test]
+    fn li_all_values() {
+        let mut cpu = Anti80::new();
+        assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 0, 0, 0]);
+
+        for v in -32768..=32767 {
+            cpu.asm_addr = 0;
+            cpu.pc = 0;
+            cpu.asm_li(R6, v);
+            if (Anti80Insn::from_bytes(cpu.load16(cpu.pc))).opcode() == Prefix {
+                cpu.step();
+            }
+            cpu.step();
+            assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 0, v, 0]);
+        }
+    }
+
+    #[test]
+    fn addi_all_values() {
+        let mut cpu = Anti80::new();
+        assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 0, 0, 0]);
+        cpu.reg[2] = 42;
+
+        for v in -32768..=32767 {
+            cpu.asm_addr = 0;
+            cpu.pc = 0;
+            cpu.asm_addi(R4, R2, v);
+            if (Anti80Insn::from_bytes(cpu.load16(cpu.pc))).opcode() == Prefix {
+                cpu.step();
+            }
+            cpu.step();
+            assert_eq!(cpu.reg, [0, 0, 42, 0, v.wrapping_add(42) as i16, 0, 0, 0]);
+        }
+    }
+
+    #[test]
     fn init_and_step() {
-        use Anti80Opcode::*;
-        let mut anti80 = Anti80::new();
+        let mut cpu = Anti80::new();
 
-        anti80.asm_li(R5, 14);
-        anti80.asm_li(R6, 7);
-        anti80.asm_alu(Add, R7, R5, R6);
+        cpu.asm_alu(Add, R7, R5, R6);
 
-        anti80.step();
-        assert_eq!(anti80.reg, [0, 0, 0, 0, 0, 14, 0, 0]);
+        cpu.step();
+        assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 14, 7, 0]);
 
-        anti80.step();
-        assert_eq!(anti80.reg, [0, 0, 0, 0, 0, 14, 7, 0]);
-
-        anti80.step();
-        assert_eq!(anti80.reg, [0, 0, 0, 0, 0, 14, 7, 21]);
+        cpu.step();
+        assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 14, 7, 21]);
 
         //      anti80.asm(Jal, 1, 7, 5, 6 | 0x18);
     }

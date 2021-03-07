@@ -90,7 +90,7 @@ a compiler to target.
 | `lb`         |         | rd              | rs1      | imm4:0      |
 | `lbu`        |         | rd              | rs1      | imm4:0      |
 |              |         |                 |          |             |
-| `skipc`      |         | cond            | rs1      | imm4:0/rs2  |
+| `skipc`      |         | cond            | rs1      | imm4:0/rs2  | simm6 in -24..31                                   |
 | `add`        |         | rd              | rs1      | imm4:0/rs2  |
 | `subr`       |         | rd              | rs1      | imm4:0/rs2  |
 | `and`        |         | rd              | rs1      | imm4:0/rs2  |
