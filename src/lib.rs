@@ -288,7 +288,7 @@ impl Anti80 {
                     Bge => rs1 >= simm6_or_rs2,
                     Bltu => (rs1 as usize) < (simm6_or_rs2 as usize),
                     Bgeu => (rs1 as usize) >= (simm6_or_rs2 as usize),
-                    _ => false,
+                    _ => panic!("reserved instruction"),
                 } {
                     self.pc += 2
                 }
@@ -392,8 +392,6 @@ mod tests {
         assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 14, 7, 0]);
         cpu.step();
         assert_eq!(cpu.reg, [0, 0, 0, 0, 0, 14, 7, 21]);
-
-        //      anti80.asm(Jal, 1, 7, 5, 6 | 0x18);
     }
 
     #[test]

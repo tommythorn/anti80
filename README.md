@@ -119,28 +119,29 @@ There seven cases:
 - alu uses rs2 iff insn[15,4,3] == 4 otherwise uses insn[15,4:0] as signed immediate.
 - The shift instruction has a less regular encoding (trading simplicity for density):
 
-| sign,imm4:0 | Decoding |
-| ----------- | -------- |
-| 00iiii      | SRL imm4 |
-| 01iiii      | SRA imm4 |
-| 100rrr      | SRL rs2  |
-| 101rrr      | SLL rs2  |
-| 110rrr      | SRA rs2  |
-| 111iii      | SLL imm3 |
+| sign,imm4:0 | Decoding   |
+| ----------- | ---------- |
+| 00iiii      | `srl` imm4 |
+| 01iiii      | `sra` imm4 |
+| 100rrr      | `srl` rs2  |
+| 101rrr      | `sll` rs2  |
+| 110rrr      | `sra` rs2  |
+| 111iii      | `sll` imm3 |
 
 That is
-- SLL iff S & insn[3],
-- SRx iff !S | !insn[3]
-- SRA iff SRx & insn[4]
+- `sll` iff S & insn[3],
+- `sra` or `srl` iff !S | !insn[3]
+- `sra` iff SRx & insn[4]
 - imm4 iff !S
 - imm3 iff S & insn[4] & insn[3]
 
-Unfortunately, the 8 missing SLL with 8,..,15 immediates have to
+Unfortunately, the eight missing `sll` with 8,..,15 immediates have to
 broken up into two instructions.
 
-Condition codes are decoded as: EQ,NE,-,-,LT,GE,LTU,GEU.  E.g. `SKIP
-GEU r9, 11` means that if `(unsigned)r9 >= 11` then the next
-instruction is ignored (skipping an IMM10 is undefined).
+Condition codes are decoded as: `eq`,`ne`,-,-,`lt`,`ge`,`ltu`,`geu`.
+E.g. `skipc r9, geu, 11` means that if `(unsigned)r9 >= 11u` then the next
+instruction is ignored (if skipping a `prefix` then a total of two
+instructions are skipped).
 
 ## Credits
 
@@ -148,3 +149,15 @@ Inspiration taken from RISC-V, Yale Patt's LC-3, and IBM's PowerPC
 
 Deeply indebt to Erik Corry for poking holes in many many earlier
 drafts and suggesting changes.  All remaining errors are mine.
+
+## TODO
+* Change `skipc` to `pred` (which implies flipping the meaning).  This is mostly to make RISC-V translations trivial.
+* Fix the behavior of `pred` on `prefix`
+* Complete the assembly and testing of every instruction
+* Write small examples (Sieve, recursive fib, ...)
+* (Eventually) rework the opcode & shift bitpatterns for cheaper decoding.
+
+Nice to have, but not planned:
+* Small compiler
+* Timing simulator
+* Verilog implementation/FPGA Softcore
